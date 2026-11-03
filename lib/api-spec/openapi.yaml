@@ -3,34 +3,482 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: >
+    Tenant-isolated authentication and authorization API. Authentication requires
+    Redis for session cache and immediate token/session revocation.
 servers:
   - url: /api
-    description: Base API path
+    description: API base path
 tags:
   - name: health
-    description: Health operations
+  - name: auth
+  - name: tenant
+  - name: users
+  - name: roles
+  - name: sessions
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
-      summary: Health check
-      description: Returns server health status
+      summary: Liveness check
       responses:
         "200":
-          description: Healthy
+          description: Server is running
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /readyz:
+    get:
+      operationId: readinessCheck
+      tags: [health]
+      summary: Check database, session secret, and Redis readiness
+      responses:
+        "200":
+          description: Required dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Readiness"
+        "503":
+          description: One or more required dependencies are unavailable
+  /auth/register:
+    post:
+      operationId: registerTenant
+      tags: [auth]
+      summary: Create a tenant and its first owner account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Tenant and owner created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Authenticate a user within a tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication succeeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /auth/refresh:
+    post:
+      operationId: refreshSession
+      tags: [auth]
+      summary: Rotate a refresh token and extend the session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Tokens rotated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenPair"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the current session immediately
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Return the authenticated user and tenant
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current identity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    $ref: "#/components/schemas/User"
+                  tenant:
+                    $ref: "#/components/schemas/TenantIdentity"
+                required: [user, tenant]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /tenants/me:
+    get:
+      operationId: getCurrentTenant
+      tags: [tenant]
+      summary: Read the authenticated tenant and subscription tier
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /users:
+    get:
+      operationId: listTenantUsers
+      tags: [users]
+      summary: List users in the authenticated tenant
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Tenant users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/User"
+                        - type: object
+                          properties:
+                            active:
+                              type: boolean
+                            roles:
+                              type: array
+                              items:
+                                type: string
+                            createdAt:
+                              type: string
+                              format: date-time
+                required: [users]
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /roles:
+    get:
+      operationId: listTenantRoles
+      tags: [roles]
+      summary: List built-in and custom roles
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Role"
+                required: [roles]
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createTenantRole
+      tags: [roles]
+      summary: Create a custom role within the tenant tier limit
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRoleRequest"
+      responses:
+        "201":
+          description: Role created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  role:
+                    $ref: "#/components/schemas/Role"
+                required: [role]
+        "402":
+          description: Tier limit reached
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /sessions/{sessionId}/revoke:
+    post:
+      operationId: revokeTenantSession
+      tags: [sessions]
+      summary: Revoke a session in the authenticated tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Session revoked
+        "404":
+          description: Session does not exist in this tenant
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /audit/events:
+    get:
+      operationId: listAuditEvents
+      tags: [sessions]
+      summary: Read tenant-scoped audit events
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Recent tenant audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        eventId:
+                          type: string
+                          format: uuid
+                        actorUserId:
+                          type: [string, "null"]
+                        event:
+                          type: string
+                        metadata:
+                          type: object
+                        createdAt:
+                          type: string
+                          format: date-time
+                      required: [eventId, event, metadata, createdAt]
+                required: [events]
+        "403":
+          $ref: "#/components/responses/Forbidden"
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Request validation failed
+    Unauthorized:
+      description: Authentication required or token invalid
+    Forbidden:
+      description: Permission denied
+    Unavailable:
+      description: Required dependency unavailable
   schemas:
     HealthStatus:
       type: object
       properties:
         status:
           type: string
-      required:
-        - status
-
+          const: ok
+      required: [status]
+    Readiness:
+      type: object
+      properties:
+        status:
+          type: string
+          const: ready
+        checks:
+          type: object
+          additionalProperties:
+            type: boolean
+      required: [status, checks]
+    RegisterRequest:
+      type: object
+      properties:
+        tenantName:
+          type: string
+          minLength: 2
+          maxLength: 120
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+      required: [tenantName, name, email, password]
+      additionalProperties: false
+    LoginRequest:
+      type: object
+      properties:
+        tenantSlug:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [tenantSlug, email, password]
+      additionalProperties: false
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required: [refreshToken]
+      additionalProperties: false
+    TokenPair:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        accessTokenExpiresIn:
+          type: integer
+        sessionExpiresAt:
+          type: string
+          format: date-time
+      required: [accessToken, refreshToken, accessTokenExpiresIn, sessionExpiresAt]
+    AuthResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenPair"
+        - type: object
+          properties:
+            tenant:
+              $ref: "#/components/schemas/Tenant"
+            user:
+              $ref: "#/components/schemas/User"
+    User:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+      required: [userId, email, name]
+    TenantIdentity:
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required: [tenantId, name]
+    Tenant:
+      allOf:
+        - $ref: "#/components/schemas/TenantIdentity"
+        - type: object
+          properties:
+            slug:
+              type: string
+            plan:
+              type: string
+              enum: [free, premium]
+            createdAt:
+              type: string
+              format: date-time
+          required: [slug, plan, createdAt]
+    Role:
+      type: object
+      properties:
+        roleId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        builtIn:
+          type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
+      required: [roleId, name, slug, builtIn, permissions]
+    CreateRoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 64
+        permissions:
+          type: array
+          items:
+            type: string
+            enum:
+              - tenant:read
+              - users:read
+              - users:manage
+              - roles:read
+              - roles:create
+              - roles:manage
+              - resources:read
+              - resources:write
+              - audit:read
+              - sessions:revoke
+      required: [name]
+      additionalProperties: false
