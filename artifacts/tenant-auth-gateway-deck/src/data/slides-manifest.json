@@ -1,0 +1,66 @@
+[
+  {
+    "id": "c42e5d58-03d3-4d50-bfc8-1e25c330f9e1",
+    "position": 1,
+    "filepath": "src/pages/slides/TenantAuthGateway.tsx",
+    "title": "Tenant Auth Gateway",
+    "description": "A modular B2B API for identity, access control, and session security.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "96f0c6f2-5808-4c3b-9c01-b74522797d31",
+    "position": 2,
+    "filepath": "src/pages/slides/OneGateway.tsx",
+    "title": "One gateway, clear boundaries",
+    "description": "API, data, cache, and contract layers.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "0365cf54-18f7-43f9-b9a8-e444a6e5ab67",
+    "position": 3,
+    "filepath": "src/pages/slides/TenantIsolation.tsx",
+    "title": "Tenant isolation is enforced in queries",
+    "description": "Tenant context scopes every application query.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "81d21c68-7ec1-4145-89b0-f3f778a429d1",
+    "position": 4,
+    "filepath": "src/pages/slides/Permissions.tsx",
+    "title": "Permissions map to real routes",
+    "description": "Built-in roles and permission boundaries.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "30ae7ec5-22bd-4b37-af6e-88f58d19192a",
+    "position": 5,
+    "filepath": "src/pages/slides/Sessions.tsx",
+    "title": "Sessions stay revocable",
+    "description": "Access-token lifetime, refresh, and revocation behavior.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "4ad697ba-07e3-4b07-bb8a-9424555de71c",
+    "position": 6,
+    "filepath": "src/pages/slides/Plans.tsx",
+    "title": "Plans control custom roles",
+    "description": "Custom-role policy limits by plan.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "08d1cb85-6fce-4d77-b176-5315d739c8c9",
+    "position": 7,
+    "filepath": "src/pages/slides/Demo.tsx",
+    "title": "The demo makes policy tangible",
+    "description": "Local demo scenarios and sample tenant state.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "5b01925e-b66a-4b9f-aacd-9cc57d8ddf4a",
+    "position": 8,
+    "filepath": "src/pages/slides/Integration.tsx",
+    "title": "Ready for integration, with clear dependencies",
+    "description": "Test coverage, API docs, and live dependencies.",
+    "speakerNotes": ""
+  }
+]

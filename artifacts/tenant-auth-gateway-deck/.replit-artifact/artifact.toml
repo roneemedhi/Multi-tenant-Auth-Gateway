@@ -1,0 +1,28 @@
+kind = "slides"
+previewPath = "/tenant-auth-gateway-deck/"
+title = "Tenant Auth Gateway — Project Deck"
+description = "An eight-slide overview of the multi-tenant B2B authentication and authorization API gateway, its security model, session lifecycle, tier policy, and interactive demo."
+version = "1.0.0"
+id = "artifacts/tenant-auth-gateway-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/tenant-auth-gateway-deck/" ]
+localPort = 19208
+
+[services.development]
+run = "pnpm --filter @workspace/tenant-auth-gateway-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/tenant-auth-gateway-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/tenant-auth-gateway-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19208"
+BASE_PATH = "/tenant-auth-gateway-deck/"
