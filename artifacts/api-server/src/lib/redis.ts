@@ -18,15 +18,27 @@ if (process.env.REDIS_URL) {
 
 export async function getRedis(): Promise<Redis> {
   if (!client) {
-    throw new Error("Redis is not configured. Set REDIS_URL to enable authentication.");
+    throw Object.assign(
+      new Error("Redis is not configured. Set REDIS_URL to enable authentication."),
+      { statusCode: 503 },
+    );
   }
 
   if (client.status === "wait") {
-    await client.connect();
+    try {
+      await client.connect();
+    } catch (error) {
+      throw Object.assign(new Error("Redis is unavailable.", { cause: error }), {
+        statusCode: 503,
+      });
+    }
   }
 
   if (client.status !== "ready") {
-    throw new Error("Redis is unavailable. Authentication is temporarily disabled.");
+    throw Object.assign(
+      new Error("Redis is unavailable. Authentication is temporarily disabled."),
+      { statusCode: 503 },
+    );
   }
 
   return client;

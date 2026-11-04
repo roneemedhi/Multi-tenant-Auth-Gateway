@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Gateway Demo Console"
+description = "An interactive, clearly labeled sandbox for exploring tenant boundaries, roles, plan limits, and session revocation in the Tenant Auth Gateway. All sample data and simulation outcomes stay in the browser and never touch production records."
+version = "1.0.0"
+id = "artifacts/gateway-demo"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23331
+
+[services.development]
+run = "pnpm --filter @workspace/gateway-demo run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gateway-demo", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/gateway-demo/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23331"
+BASE_PATH = "/"

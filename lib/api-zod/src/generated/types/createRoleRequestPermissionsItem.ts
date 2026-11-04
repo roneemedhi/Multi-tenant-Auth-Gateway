@@ -12,6 +12,7 @@ export type CreateRoleRequestPermissionsItem = typeof CreateRoleRequestPermissio
 
 export const CreateRoleRequestPermissionsItem = {
   'tenant:read': 'tenant:read',
+  'tenant:manage': 'tenant:manage',
   'users:read': 'users:read',
   'users:manage': 'users:manage',
   'roles:read': 'roles:read',
@@ -20,5 +21,6 @@ export const CreateRoleRequestPermissionsItem = {
   'resources:read': 'resources:read',
   'resources:write': 'resources:write',
   'audit:read': 'audit:read',
+  'sessions:read': 'sessions:read',
   'sessions:revoke': 'sessions:revoke',
 } as const;

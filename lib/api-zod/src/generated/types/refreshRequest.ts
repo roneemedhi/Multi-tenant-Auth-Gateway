@@ -8,5 +8,9 @@
  */
 
 export interface RefreshRequest {
+  /**
+     * @minLength 32
+     * @maxLength 256
+     */
   refreshToken: string;
 }

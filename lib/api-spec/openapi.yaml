@@ -60,7 +60,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/RegisterResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
         "503":
@@ -82,7 +82,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AuthResponse"
+                $ref: "#/components/schemas/LoginResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "503":
@@ -195,6 +195,54 @@ paths:
                 required: [users]
         "403":
           $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createTenantUser
+      tags: [users]
+      summary: Create a user with a tenant-scoped role
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInput"
+      responses:
+        "201":
+          description: User created in the authenticated tenant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateTenantUserResult"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /users/{userId}/role:
+    patch:
+      operationId: assignTenantUserRole
+      tags: [users]
+      summary: Replace a user's role within the authenticated tenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignRoleInput"
+      responses:
+        "204":
+          description: Role assignment updated
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: User or role does not belong to this tenant
   /roles:
     get:
       operationId: listTenantRoles
@@ -263,6 +311,47 @@ paths:
           description: Session revoked
         "404":
           description: Session does not exist in this tenant
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /sessions:
+    get:
+      operationId: listTenantSessions
+      tags: [sessions]
+      summary: List active sessions in the authenticated tenant
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Active tenant sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sessionId:
+                          type: string
+                          format: uuid
+                        userId:
+                          type: string
+                          format: uuid
+                        userName:
+                          type: string
+                        createdAt:
+                          type: string
+                          format: date-time
+                        lastUsedAt:
+                          type: string
+                          format: date-time
+                        expiresAt:
+                          type: string
+                          format: date-time
+                      required: [sessionId, userId, userName, createdAt, lastUsedAt, expiresAt]
+                required: [sessions]
         "403":
           $ref: "#/components/responses/Forbidden"
   /audit/events:
@@ -382,6 +471,8 @@ components:
       properties:
         refreshToken:
           type: string
+          minLength: 32
+          maxLength: 256
       required: [refreshToken]
       additionalProperties: false
     TokenPair:
@@ -391,13 +482,16 @@ components:
           type: string
         refreshToken:
           type: string
+        sessionId:
+          type: string
+          format: uuid
         accessTokenExpiresIn:
           type: integer
         sessionExpiresAt:
           type: string
           format: date-time
-      required: [accessToken, refreshToken, accessTokenExpiresIn, sessionExpiresAt]
-    AuthResponse:
+      required: [accessToken, refreshToken, sessionId, accessTokenExpiresIn, sessionExpiresAt]
+    RegisterResponse:
       allOf:
         - $ref: "#/components/schemas/TokenPair"
         - type: object
@@ -406,6 +500,15 @@ components:
               $ref: "#/components/schemas/Tenant"
             user:
               $ref: "#/components/schemas/User"
+          required: [tenant, user]
+    LoginResult:
+      allOf:
+        - $ref: "#/components/schemas/TokenPair"
+        - type: object
+          properties:
+            user:
+              $ref: "#/components/schemas/User"
+          required: [user]
     User:
       type: object
       properties:
@@ -467,10 +570,12 @@ components:
           maxLength: 64
         permissions:
           type: array
+          default: []
           items:
             type: string
             enum:
               - tenant:read
+              - tenant:manage
               - users:read
               - users:manage
               - roles:read
@@ -479,6 +584,59 @@ components:
               - resources:read
               - resources:write
               - audit:read
+              - sessions:read
               - sessions:revoke
       required: [name]
+      additionalProperties: false
+    UserInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 12
+          maxLength: 128
+        roleId:
+          type: string
+          format: uuid
+      required: [name, email, password, roleId]
+      additionalProperties: false
+    TenantUser:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        active:
+          type: boolean
+        roles:
+          type: array
+          items:
+            type: string
+      required: [userId, email, name, active, roles]
+    CreateTenantUserResult:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/TenantUser"
+      required: [user]
+    AssignRoleInput:
+      type: object
+      properties:
+        roleId:
+          type: string
+          format: uuid
+      required: [roleId]
       additionalProperties: false

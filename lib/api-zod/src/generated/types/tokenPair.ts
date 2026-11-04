@@ -10,6 +10,7 @@
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+  sessionId: string;
   accessTokenExpiresIn: number;
   sessionExpiresAt: Date;
 }

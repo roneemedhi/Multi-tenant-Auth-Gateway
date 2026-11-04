@@ -21,23 +21,30 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  AuthResponse,
+  AssignRoleInput,
   BadRequestResponse,
   CreateRoleRequest,
   CreateTenantRole201,
+  CreateTenantUserResult,
   ForbiddenResponse,
   GetCurrentUser200,
   HealthStatus,
+  ListAuditEvents200,
+  ListAuditEventsParams,
   ListTenantRoles200,
+  ListTenantSessions200,
   ListTenantUsers200,
   LoginRequest,
+  LoginResult,
   Readiness,
   RefreshRequest,
   RegisterRequest,
+  RegisterResponse,
   Tenant,
   TokenPair,
   UnauthorizedResponse,
-  UnavailableResponse
+  UnavailableResponse,
+  UserInput
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -232,7 +239,7 @@ export const getRegisterTenantUrl = () => {
 /**
  * @summary Create a tenant and its first owner account
  */
-export const registerTenant = async (registerRequest: RegisterRequest, options?: Parameters<typeof customFetch>[1]): Promise<AuthResponse> => {
+export const registerTenant = async (registerRequest: RegisterRequest, options?: Parameters<typeof customFetch>[1]): Promise<RegisterResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -248,7 +255,7 @@ export const registerTenant = async (registerRequest: RegisterRequest, options?:
     }
     return headers;
   };
-return customFetch<AuthResponse>(getRegisterTenantUrl(),
+return customFetch<RegisterResponse>(getRegisterTenantUrl(),
   {
     ...options,
     method: 'POST',
@@ -320,7 +327,7 @@ export const getLoginUrl = () => {
 /**
  * @summary Authenticate a user within a tenant
  */
-export const login = async (loginRequest: LoginRequest, options?: Parameters<typeof customFetch>[1]): Promise<AuthResponse> => {
+export const login = async (loginRequest: LoginRequest, options?: Parameters<typeof customFetch>[1]): Promise<LoginResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -336,7 +343,7 @@ export const login = async (loginRequest: LoginRequest, options?: Parameters<typ
     }
     return headers;
   };
-return customFetch<AuthResponse>(getLoginUrl(),
+return customFetch<LoginResult>(getLoginUrl(),
   {
     ...options,
     method: 'POST',
@@ -790,6 +797,183 @@ export function useListTenantUsers<TData = Awaited<ReturnType<typeof listTenantU
 
 
 
+export const getCreateTenantUserUrl = () => {
+
+
+
+
+  return `/api/users`
+}
+
+/**
+ * @summary Create a user with a tenant-scoped role
+ */
+export const createTenantUser = async (userInput: UserInput, options?: Parameters<typeof customFetch>[1]): Promise<CreateTenantUserResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<CreateTenantUserResult>(getCreateTenantUserUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(userInput)
+  }
+);}
+
+
+
+
+
+export const getCreateTenantUserMutationKey = () => ['createTenantUser'] as const;
+
+export const getCreateTenantUserMutationOptions = <TError = ErrorType<ForbiddenResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTenantUser>>, TError,CreateTenantUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createTenantUser>>, TError,CreateTenantUserMutationVariables, TContext> => {
+
+const mutationKey = getCreateTenantUserMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createTenantUser>>, CreateTenantUserMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createTenantUser(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateTenantUserMutationResult = NonNullable<Awaited<ReturnType<typeof createTenantUser>>>
+    export type CreateTenantUserMutationBody = BodyType<UserInput>
+    export type CreateTenantUserMutationError = ErrorType<ForbiddenResponse>
+    export type CreateTenantUserMutationVariables = {data: BodyType<UserInput>}
+
+    /**
+ * @summary Create a user with a tenant-scoped role
+ */
+export const useCreateTenantUser = <TError = ErrorType<ForbiddenResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createTenantUser>>, TError,CreateTenantUserMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createTenantUser>>,
+        TError,
+        CreateTenantUserMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateTenantUserMutationOptions(options));
+    }
+
+export const getAssignTenantUserRoleUrl = (userId: string,) => {
+
+
+
+
+  return `/api/users/${userId}/role`
+}
+
+/**
+ * @summary Replace a user's role within the authenticated tenant
+ */
+export const assignTenantUserRole = async (userId: string,
+    assignRoleInput: AssignRoleInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getAssignTenantUserRoleUrl(userId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(assignRoleInput)
+  }
+);}
+
+
+
+
+
+export const getAssignTenantUserRoleMutationKey = () => ['assignTenantUserRole'] as const;
+
+export const getAssignTenantUserRoleMutationOptions = <TError = ErrorType<ForbiddenResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignTenantUserRole>>, TError,AssignTenantUserRoleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof assignTenantUserRole>>, TError,AssignTenantUserRoleMutationVariables, TContext> => {
+
+const mutationKey = getAssignTenantUserRoleMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof assignTenantUserRole>>, AssignTenantUserRoleMutationVariables> = (props) => {
+          const {userId,data} = props ?? {};
+
+          return  assignTenantUserRole(userId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AssignTenantUserRoleMutationResult = NonNullable<Awaited<ReturnType<typeof assignTenantUserRole>>>
+    export type AssignTenantUserRoleMutationBody = BodyType<AssignRoleInput>
+    export type AssignTenantUserRoleMutationError = ErrorType<ForbiddenResponse | void>
+    export type AssignTenantUserRoleMutationVariables = {userId: string;data: BodyType<AssignRoleInput>}
+
+    /**
+ * @summary Replace a user's role within the authenticated tenant
+ */
+export const useAssignTenantUserRole = <TError = ErrorType<ForbiddenResponse | void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof assignTenantUserRole>>, TError,AssignTenantUserRoleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof assignTenantUserRole>>,
+        TError,
+        AssignTenantUserRoleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAssignTenantUserRoleMutationOptions(options));
+    }
+
 export const getListTenantRolesUrl = () => {
 
 
@@ -1028,4 +1212,165 @@ export const useRevokeTenantSession = <TError = ErrorType<ForbiddenResponse | vo
       > => {
       return useMutation(getRevokeTenantSessionMutationOptions(options));
     }
+
+export const getListTenantSessionsUrl = () => {
+
+
+
+
+  return `/api/sessions`
+}
+
+/**
+ * @summary List active sessions in the authenticated tenant
+ */
+export const listTenantSessions = async ( options?: Parameters<typeof customFetch>[1]): Promise<ListTenantSessions200> => {
+
+  return customFetch<ListTenantSessions200>(getListTenantSessionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListTenantSessionsQueryKey = () => {
+    return [
+    `/api/sessions`
+    ] as const;
+    }
+
+
+export const getListTenantSessionsQueryOptions = <TData = Awaited<ReturnType<typeof listTenantSessions>>, TError = ErrorType<ForbiddenResponse>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTenantSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListTenantSessionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listTenantSessions>>> = ({ signal }) => listTenantSessions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listTenantSessions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListTenantSessionsQueryResult = NonNullable<Awaited<ReturnType<typeof listTenantSessions>>>
+export type ListTenantSessionsQueryError = ErrorType<ForbiddenResponse>
+
+
+/**
+ * @summary List active sessions in the authenticated tenant
+ */
+
+export function useListTenantSessions<TData = Awaited<ReturnType<typeof listTenantSessions>>, TError = ErrorType<ForbiddenResponse>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listTenantSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListTenantSessionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAuditEventsUrl = (params?: ListAuditEventsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/audit/events?${stringifiedParams}` : `/api/audit/events`
+}
+
+/**
+ * @summary Read tenant-scoped audit events
+ */
+export const listAuditEvents = async (params?: ListAuditEventsParams, options?: Parameters<typeof customFetch>[1]): Promise<ListAuditEvents200> => {
+
+  return customFetch<ListAuditEvents200>(getListAuditEventsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAuditEventsQueryKey = (params?: ListAuditEventsParams,) => {
+    return [
+    `/api/audit/events`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListAuditEventsQueryOptions = <TData = Awaited<ReturnType<typeof listAuditEvents>>, TError = ErrorType<ForbiddenResponse>>(params?: ListAuditEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAuditEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAuditEventsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAuditEvents>>> = ({ signal }) => listAuditEvents(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAuditEvents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAuditEventsQueryResult = NonNullable<Awaited<ReturnType<typeof listAuditEvents>>>
+export type ListAuditEventsQueryError = ErrorType<ForbiddenResponse>
+
+
+/**
+ * @summary Read tenant-scoped audit events
+ */
+
+export function useListAuditEvents<TData = Awaited<ReturnType<typeof listAuditEvents>>, TError = ErrorType<ForbiddenResponse>>(
+ params?: ListAuditEventsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAuditEvents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAuditEventsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

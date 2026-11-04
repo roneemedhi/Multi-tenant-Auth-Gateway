@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
+import { CreateTenantRoleResponse } from "@workspace/api-zod";
 import {
   canGrantPermissions,
   customRoleLimit,
@@ -73,9 +74,9 @@ router.post(
       return;
     }
 
-    const name = parsed.data.name;
+    const name = parsed.data.name.trim();
     const slug = slugify(name);
-    if (!slug || ["owner", "admin", "editor", "viewer"].includes(slug)) {
+    if (name.length < 2 || !slug || ["owner", "admin", "editor", "viewer"].includes(slug)) {
       res.status(400).json({ error: "Role name is reserved or invalid" });
       return;
     }
@@ -162,7 +163,7 @@ router.post(
         client.release();
       }
 
-      res.status(201).json({
+      res.status(201).json(CreateTenantRoleResponse.parse({
         role: {
           roleId: createdRoleId,
           name,
@@ -170,7 +171,7 @@ router.post(
           builtIn: false,
           permissions: parsed.data.permissions,
         },
-      });
+      }));
     } catch (error) {
       req.log.error({ err: error }, "Role creation failed");
       if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {

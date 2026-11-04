@@ -13,6 +13,7 @@ import { hashRefreshToken } from "../middlewares/auth";
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+  sessionId: string;
   accessTokenExpiresIn: number;
   sessionExpiresAt: string;
 }
@@ -65,6 +66,7 @@ export async function createSession(
   return {
     accessToken,
     refreshToken,
+    sessionId,
     accessTokenExpiresIn: ACCESS_TOKEN_TTL_SECONDS,
     sessionExpiresAt: expiresAt.toISOString(),
   };
@@ -123,6 +125,7 @@ export async function rotateSession(refreshToken: string): Promise<TokenPair | n
   return {
     accessToken,
     refreshToken: replacement,
+    sessionId: session.id,
     accessTokenExpiresIn: ACCESS_TOKEN_TTL_SECONDS,
     sessionExpiresAt: nextExpiry.toISOString(),
   };

@@ -25,6 +25,8 @@ describe("tenant authorization policy", () => {
     expect(BUILT_IN_ROLE_PERMISSIONS.Viewer).not.toContain("resources:write");
     expect(BUILT_IN_ROLE_PERMISSIONS.Editor).toContain("resources:write");
     expect(BUILT_IN_ROLE_PERMISSIONS.Owner).toContain("sessions:revoke");
+    expect(BUILT_IN_ROLE_PERMISSIONS.Owner).toContain("tenant:manage");
+    expect(BUILT_IN_ROLE_PERMISSIONS.Admin).not.toContain("tenant:manage");
   });
 
   it("prevents users from granting permissions they do not hold", () => {

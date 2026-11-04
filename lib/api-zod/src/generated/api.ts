@@ -51,6 +51,7 @@ export const RegisterTenantBody = zod.object({
 export const RegisterTenantResponse = zod.object({
   "accessToken": zod.string(),
   "refreshToken": zod.string(),
+  "sessionId": zod.string().uuid(),
   "accessTokenExpiresIn": zod.number().int(),
   "sessionExpiresAt": zod.coerce.date()
 }).and(zod.object({
@@ -61,12 +62,12 @@ export const RegisterTenantResponse = zod.object({
   "slug": zod.string(),
   "plan": zod.enum(['free', 'premium']),
   "createdAt": zod.coerce.date()
-})).optional(),
+})),
   "user": zod.object({
   "userId": zod.string().uuid(),
   "email": zod.string().email(),
   "name": zod.string()
-}).optional()
+})
 }))
 
 
@@ -82,35 +83,34 @@ export const LoginBody = zod.object({
 export const LoginResponse = zod.object({
   "accessToken": zod.string(),
   "refreshToken": zod.string(),
+  "sessionId": zod.string().uuid(),
   "accessTokenExpiresIn": zod.number().int(),
   "sessionExpiresAt": zod.coerce.date()
 }).and(zod.object({
-  "tenant": zod.object({
-  "tenantId": zod.string().uuid(),
-  "name": zod.string()
-}).and(zod.object({
-  "slug": zod.string(),
-  "plan": zod.enum(['free', 'premium']),
-  "createdAt": zod.coerce.date()
-})).optional(),
   "user": zod.object({
   "userId": zod.string().uuid(),
   "email": zod.string().email(),
   "name": zod.string()
-}).optional()
+})
 }))
 
 
 /**
  * @summary Rotate a refresh token and extend the session
  */
+export const refreshSessionBodyRefreshTokenMin = 32;
+export const refreshSessionBodyRefreshTokenMax = 256;
+
+
+
 export const RefreshSessionBody = zod.object({
-  "refreshToken": zod.string()
+  "refreshToken": zod.string().min(refreshSessionBodyRefreshTokenMin).max(refreshSessionBodyRefreshTokenMax)
 })
 
 export const RefreshSessionResponse = zod.object({
   "accessToken": zod.string(),
   "refreshToken": zod.string(),
+  "sessionId": zod.string().uuid(),
   "accessTokenExpiresIn": zod.number().int(),
   "sessionExpiresAt": zod.coerce.date()
 })
@@ -168,6 +168,50 @@ export const ListTenantUsersResponse = zod.object({
 
 
 /**
+ * @summary Create a user with a tenant-scoped role
+ */
+export const createTenantUserBodyNameMax = 120;
+
+export const createTenantUserBodyEmailMax = 254;
+
+export const createTenantUserBodyPasswordMin = 12;
+export const createTenantUserBodyPasswordMax = 128;
+
+
+
+export const CreateTenantUserBody = zod.object({
+  "name": zod.string().min(1).max(createTenantUserBodyNameMax),
+  "email": zod.string().email().max(createTenantUserBodyEmailMax),
+  "password": zod.string().min(createTenantUserBodyPasswordMin).max(createTenantUserBodyPasswordMax),
+  "roleId": zod.string().uuid()
+})
+
+export const CreateTenantUserResponse = zod.object({
+  "user": zod.object({
+  "userId": zod.string().uuid(),
+  "email": zod.string().email(),
+  "name": zod.string(),
+  "active": zod.boolean(),
+  "roles": zod.array(zod.string())
+})
+})
+
+
+/**
+ * @summary Replace a user's role within the authenticated tenant
+ */
+export const AssignTenantUserRoleParams = zod.object({
+  "userId": zod.coerce.string().uuid()
+})
+
+export const AssignTenantUserRoleBody = zod.object({
+  "roleId": zod.string().uuid()
+})
+
+export const AssignTenantUserRoleResponse = zod.void()
+
+
+/**
  * @summary List built-in and custom roles
  */
 export const ListTenantRolesResponse = zod.object({
@@ -187,11 +231,11 @@ export const ListTenantRolesResponse = zod.object({
 export const createTenantRoleBodyNameMin = 2;
 export const createTenantRoleBodyNameMax = 64;
 
-
+export const createTenantRoleBodyPermissionsDefault = [];
 
 export const CreateTenantRoleBody = zod.object({
   "name": zod.string().min(createTenantRoleBodyNameMin).max(createTenantRoleBodyNameMax),
-  "permissions": zod.array(zod.enum(['tenant:read', 'users:read', 'users:manage', 'roles:read', 'roles:create', 'roles:manage', 'resources:read', 'resources:write', 'audit:read', 'sessions:revoke'])).optional()
+  "permissions": zod.array(zod.enum(['tenant:read', 'tenant:manage', 'users:read', 'users:manage', 'roles:read', 'roles:create', 'roles:manage', 'resources:read', 'resources:write', 'audit:read', 'sessions:read', 'sessions:revoke'])).default(createTenantRoleBodyPermissionsDefault)
 })
 
 export const CreateTenantRoleResponse = zod.object({
@@ -213,5 +257,45 @@ export const RevokeTenantSessionParams = zod.object({
 })
 
 export const RevokeTenantSessionResponse = zod.void()
+
+
+/**
+ * @summary List active sessions in the authenticated tenant
+ */
+export const ListTenantSessionsResponse = zod.object({
+  "sessions": zod.array(zod.object({
+  "sessionId": zod.string().uuid(),
+  "userId": zod.string().uuid(),
+  "userName": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "lastUsedAt": zod.coerce.date(),
+  "expiresAt": zod.coerce.date()
+}))
+})
+
+
+/**
+ * @summary Read tenant-scoped audit events
+ */
+export const listAuditEventsQueryLimitDefault = 50;
+export const listAuditEventsQueryLimitMax = 100;
+
+
+
+export const ListAuditEventsQueryParams = zod.object({
+  "limit": zod.coerce.number().int().min(1).max(listAuditEventsQueryLimitMax).default(listAuditEventsQueryLimitDefault)
+})
+
+export const ListAuditEventsResponse = zod.object({
+  "events": zod.array(zod.object({
+  "eventId": zod.string().uuid(),
+  "actorUserId": zod.string().nullish(),
+  "event": zod.string(),
+  "metadata": zod.object({
+
+}).passthrough(),
+  "createdAt": zod.coerce.date()
+}))
+})
 
 

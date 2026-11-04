@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Router, type IRouter } from "express";
+import { RegisterTenantResponse, LoginResponse, RefreshSessionResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
 import {
   BUILT_IN_ROLE_PERMISSIONS,
@@ -41,10 +42,16 @@ router.post("/auth/register", registrationLimit, async (req, res): Promise<void>
     res.status(400).json({ error: "Invalid registration details", details: parsed.error.flatten() });
     return;
   }
+  const tenantName = parsed.data.tenantName.trim();
+  const name = parsed.data.name.trim();
+  if (tenantName.length < 2 || !name) {
+    res.status(400).json({ error: "Tenant and user names cannot be blank" });
+    return;
+  }
 
   try {
     await getRedis();
-    const { tenantName, name, password } = parsed.data;
+    const password = parsed.data.password;
     const email = normalizeEmail(parsed.data.email);
     const tenantId = randomUUID();
     const userId = randomUUID();
@@ -52,14 +59,17 @@ router.post("/auth/register", registrationLimit, async (req, res): Promise<void>
     const tenantSlug = `${slugify(tenantName) || "tenant"}-${tenantId.slice(0, 8)}`;
     const passwordHash = await bcrypt.hash(password, 12);
     const client = await pool.connect();
+    let tenantCreatedAt: Date;
 
     try {
       await client.query("BEGIN");
-      await client.query(
+      const tenantInsert = await client.query<{ created_at: Date }>(
         `INSERT INTO tenants (tenant_id, name, slug, plan)
-         VALUES ($1, $2, $3, 'free')`,
+         VALUES ($1, $2, $3, 'free')
+         RETURNING created_at`,
         [tenantId, tenantName, tenantSlug],
       );
+      tenantCreatedAt = tenantInsert.rows[0].created_at;
       await client.query(
         `INSERT INTO users (id, tenant_id, email, password_hash, display_name)
          VALUES ($1, $2, $3, $4, $5)`,
@@ -101,11 +111,11 @@ router.post("/auth/register", registrationLimit, async (req, res): Promise<void>
     }
 
     const tokens = await createSession(tenantId, userId);
-    res.status(201).json({
-      tenant: { tenantId, name: tenantName, slug: tenantSlug, plan: "free" },
+    res.status(201).json(RegisterTenantResponse.parse({
+      tenant: { tenantId, name: tenantName, slug: tenantSlug, plan: "free", createdAt: tenantCreatedAt },
       user: { userId, email, name },
       ...tokens,
-    });
+    }));
   } catch (error) {
     req.log.error({ err: error }, "Registration failed");
     res.status(503).json({ error: "Registration service unavailable" });
@@ -145,10 +155,10 @@ router.post("/auth/login", loginLimit, async (req, res): Promise<void> => {
     }
 
     const tokens = await createSession(user.tenant_id, user.id);
-    res.json({
+    res.json(LoginResponse.parse({
       user: { userId: user.id, email: user.email, name: user.display_name },
       ...tokens,
-    });
+    }));
   } catch (error) {
     req.log.error({ err: error }, "Login failed");
     res.status(503).json({ error: "Authentication service unavailable" });
@@ -169,7 +179,7 @@ router.post("/auth/refresh", refreshLimit, async (req, res): Promise<void> => {
       res.status(401).json({ error: "Refresh token is invalid or expired" });
       return;
     }
-    res.json(tokens);
+    res.json(RefreshSessionResponse.parse(tokens));
   } catch (error) {
     req.log.error({ err: error }, "Session refresh failed");
     res.status(503).json({ error: "Authentication service unavailable" });
@@ -240,6 +250,50 @@ router.get("/auth/me", requireAuth, async (req, res): Promise<void> => {
     res.status(503).json({ error: "User service unavailable" });
   }
 });
+
+router.get(
+  "/sessions",
+  requireAuth,
+  requirePermission("sessions:read"),
+  async (req, res): Promise<void> => {
+    const auth = res.locals.auth;
+    if (!auth) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    try {
+      const result = await pool.query<{
+        id: string;
+        user_id: string;
+        display_name: string;
+        created_at: Date;
+        last_used_at: Date;
+        expires_at: Date;
+      }>(
+        `SELECT s.id, s.user_id, u.display_name, s.created_at, s.last_used_at, s.expires_at
+         FROM sessions s
+         JOIN users u ON u.tenant_id = s.tenant_id AND u.id = s.user_id
+         WHERE s.tenant_id = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()
+         ORDER BY s.last_used_at DESC
+         LIMIT 200`,
+        [auth.tenantId],
+      );
+      res.json({
+        sessions: result.rows.map((session) => ({
+          sessionId: session.id,
+          userId: session.user_id,
+          userName: session.display_name,
+          createdAt: session.created_at,
+          lastUsedAt: session.last_used_at,
+          expiresAt: session.expires_at,
+        })),
+      });
+    } catch (error) {
+      req.log.error({ err: error }, "Tenant session list failed");
+      res.status(503).json({ error: "Session service unavailable" });
+    }
+  },
+);
 
 router.post(
   "/sessions/:sessionId/revoke",

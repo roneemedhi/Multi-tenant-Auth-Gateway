@@ -45,12 +45,17 @@ export interface LoginRequest {
 }
 
 export interface RefreshRequest {
+  /**
+     * @minLength 32
+     * @maxLength 256
+     */
   refreshToken: string;
 }
 
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
+  sessionId: string;
   accessTokenExpiresIn: number;
   sessionExpiresAt: string;
 }
@@ -80,9 +85,13 @@ export interface User {
   name: string;
 }
 
-export type AuthResponse = TokenPair & {
-  tenant?: Tenant;
-  user?: User;
+export type RegisterResponse = TokenPair & {
+  tenant: Tenant;
+  user: User;
+};
+
+export type LoginResult = TokenPair & {
+  user: User;
 };
 
 export interface Role {
@@ -98,6 +107,7 @@ export type CreateRoleRequestPermissionsItem = typeof CreateRoleRequestPermissio
 
 export const CreateRoleRequestPermissionsItem = {
   'tenant:read': 'tenant:read',
+  'tenant:manage': 'tenant:manage',
   'users:read': 'users:read',
   'users:manage': 'users:manage',
   'roles:read': 'roles:read',
@@ -106,6 +116,7 @@ export const CreateRoleRequestPermissionsItem = {
   'resources:read': 'resources:read',
   'resources:write': 'resources:write',
   'audit:read': 'audit:read',
+  'sessions:read': 'sessions:read',
   'sessions:revoke': 'sessions:revoke',
 } as const;
 
@@ -116,6 +127,38 @@ export interface CreateRoleRequest {
      */
   name: string;
   permissions?: CreateRoleRequestPermissionsItem[];
+}
+
+export interface UserInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  /** @maxLength 254 */
+  email: string;
+  /**
+     * @minLength 12
+     * @maxLength 128
+     */
+  password: string;
+  roleId: string;
+}
+
+export interface TenantUser {
+  userId: string;
+  email: string;
+  name: string;
+  active: boolean;
+  roles: string[];
+}
+
+export interface CreateTenantUserResult {
+  user: TenantUser;
+}
+
+export interface AssignRoleInput {
+  roleId: string;
 }
 
 /**
@@ -159,5 +202,41 @@ export type ListTenantRoles200 = {
 
 export type CreateTenantRole201 = {
   role: Role;
+};
+
+export type ListTenantSessions200SessionsItem = {
+  sessionId: string;
+  userId: string;
+  userName: string;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+};
+
+export type ListTenantSessions200 = {
+  sessions: ListTenantSessions200SessionsItem[];
+};
+
+export type ListAuditEventsParams = {
+/**
+ * @minimum 1
+ * @maximum 100
+ */
+limit?: number;
+};
+
+export type ListAuditEvents200EventsItemMetadata = { [key: string]: unknown };
+
+export type ListAuditEvents200EventsItem = {
+  eventId: string;
+  /** @nullable */
+  actorUserId?: string | null;
+  event: string;
+  metadata: ListAuditEvents200EventsItemMetadata;
+  createdAt: string;
+};
+
+export type ListAuditEvents200 = {
+  events: ListAuditEvents200EventsItem[];
 };
 

@@ -7,6 +7,7 @@ export const BUILT_IN_ROLES = ["Owner", "Admin", "Editor", "Viewer"] as const;
 
 export const PERMISSIONS = [
   "tenant:read",
+  "tenant:manage",
   "users:read",
   "users:manage",
   "roles:read",
@@ -15,6 +16,7 @@ export const PERMISSIONS = [
   "resources:read",
   "resources:write",
   "audit:read",
+  "sessions:read",
   "sessions:revoke",
 ] as const;
 
@@ -33,6 +35,7 @@ export const BUILT_IN_ROLE_PERMISSIONS: Record<BuiltInRole, readonly Permission[
     "resources:read",
     "resources:write",
     "audit:read",
+    "sessions:read",
     "sessions:revoke",
   ],
   Editor: ["tenant:read", "roles:read", "resources:read", "resources:write"],

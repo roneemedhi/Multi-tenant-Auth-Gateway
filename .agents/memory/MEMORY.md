@@ -1,0 +1,1 @@
+- [Tenant foreign-key migration ordering](tenant-foreign-key-ordering.md) — Drizzle push may need staged migrations for composite tenant foreign keys; keep every query tenant-scoped meanwhile.

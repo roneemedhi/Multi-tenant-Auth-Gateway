@@ -1,5 +1,14 @@
+import { randomUUID } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { Router, type IRouter } from "express";
+import { CreateTenantUserResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
+import { normalizeEmail } from "../lib/auth-config";
+import {
+  assignRoleBodySchema,
+  assignUserParamsSchema,
+  createUserBodySchema,
+} from "../lib/validation";
 import { requireAuth, requirePermission } from "../middlewares/auth";
 
 const router: IRouter = Router();
@@ -46,6 +55,111 @@ router.get(
   },
 );
 
+router.post(
+  "/users",
+  requireAuth,
+  requirePermission("users:manage"),
+  async (req, res): Promise<void> => {
+    const auth = res.locals.auth;
+    const parsed = createUserBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid user", details: parsed.error.flatten() });
+      return;
+    }
+    const name = parsed.data.name.trim();
+    if (!name) {
+      res.status(400).json({ error: "User name cannot be blank" });
+      return;
+    }
+    if (!auth) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const role = await pool.query<{ id: string; name: string }>(
+        `SELECT id, name FROM roles WHERE tenant_id = $1 AND id = $2`,
+        [auth.tenantId, parsed.data.roleId],
+      );
+      if (!role.rows[0]) {
+        res.status(404).json({ error: "Role not found" });
+        return;
+      }
+      const [actorPermissions, targetPermissions] = await Promise.all([
+        pool.query<{ permission: string }>(
+          `SELECT DISTINCT rp.permission
+           FROM memberships m
+           JOIN role_permissions rp
+             ON rp.tenant_id = m.tenant_id AND rp.role_id = m.role_id
+           WHERE m.tenant_id = $1 AND m.user_id = $2`,
+          [auth.tenantId, auth.userId],
+        ),
+        pool.query<{ permission: string }>(
+          `SELECT permission FROM role_permissions
+           WHERE tenant_id = $1 AND role_id = $2`,
+          [auth.tenantId, parsed.data.roleId],
+        ),
+      ]);
+      const actorSet = new Set(actorPermissions.rows.map((row) => row.permission));
+      if (targetPermissions.rows.some((row) => !actorSet.has(row.permission))) {
+        res.status(403).json({ error: "Cannot assign a role with permissions you do not hold" });
+        return;
+      }
+
+      const userId = randomUUID();
+      const email = normalizeEmail(parsed.data.email);
+      const passwordHash = await bcrypt.hash(parsed.data.password, 12);
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          `INSERT INTO users (id, tenant_id, email, password_hash, display_name)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [userId, auth.tenantId, email, passwordHash, name],
+        );
+        await client.query(
+          `INSERT INTO memberships (id, tenant_id, user_id, role_id)
+           VALUES ($1, $2, $3, $4)`,
+          [randomUUID(), auth.tenantId, userId, parsed.data.roleId],
+        );
+        await client.query(
+          `INSERT INTO audit_events (id, tenant_id, actor_user_id, event, metadata)
+           VALUES ($1, $2, $3, 'user.created', $4::jsonb)`,
+          [
+            randomUUID(),
+            auth.tenantId,
+            auth.userId,
+            JSON.stringify({ userId, roleId: parsed.data.roleId }),
+          ],
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      res.status(201).json(CreateTenantUserResponse.parse({
+        user: {
+          userId,
+          email,
+          name,
+          active: true,
+          roles: [role.rows[0].name],
+        },
+      }));
+    } catch (error) {
+      req.log.error({ err: error }, "Tenant user creation failed");
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "23505") {
+        res.status(409).json({ error: "A user with this email already exists in the tenant" });
+        return;
+      }
+      res.status(503).json({ error: "User service unavailable" });
+    }
+  },
+);
+
 router.get(
   "/users",
   requireAuth,
@@ -88,6 +202,96 @@ router.get(
       });
     } catch (error) {
       req.log.error({ err: error }, "Tenant user list failed");
+      res.status(503).json({ error: "User service unavailable" });
+    }
+  },
+);
+
+router.patch(
+  "/users/:userId/role",
+  requireAuth,
+  requirePermission("users:manage"),
+  async (req, res): Promise<void> => {
+    const auth = res.locals.auth;
+    const params = assignUserParamsSchema.safeParse(req.params);
+    const parsed = assignRoleBodySchema.safeParse(req.body);
+    if (!params.success || !parsed.success) {
+      res.status(400).json({ error: "Invalid user or role ID" });
+      return;
+    }
+    if (!auth) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const [targetUser, targetRole] = await Promise.all([
+        pool.query<{ id: string }>(
+          "SELECT id FROM users WHERE tenant_id = $1 AND id = $2",
+          [auth.tenantId, params.data.userId],
+        ),
+        pool.query<{ id: string }>(
+          "SELECT id FROM roles WHERE tenant_id = $1 AND id = $2",
+          [auth.tenantId, parsed.data.roleId],
+        ),
+      ]);
+      if (!targetUser.rows[0] || !targetRole.rows[0]) {
+        res.status(404).json({ error: "User or role not found in this tenant" });
+        return;
+      }
+
+      const [actorPermissions, rolePermissions] = await Promise.all([
+        pool.query<{ permission: string }>(
+          `SELECT DISTINCT rp.permission
+           FROM memberships m
+           JOIN role_permissions rp
+             ON rp.tenant_id = m.tenant_id AND rp.role_id = m.role_id
+           WHERE m.tenant_id = $1 AND m.user_id = $2`,
+          [auth.tenantId, auth.userId],
+        ),
+        pool.query<{ permission: string }>(
+          "SELECT permission FROM role_permissions WHERE tenant_id = $1 AND role_id = $2",
+          [auth.tenantId, parsed.data.roleId],
+        ),
+      ]);
+      const actorSet = new Set(actorPermissions.rows.map((row) => row.permission));
+      if (rolePermissions.rows.some((row) => !actorSet.has(row.permission))) {
+        res.status(403).json({ error: "Cannot assign a role with permissions you do not hold" });
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query(
+          "DELETE FROM memberships WHERE tenant_id = $1 AND user_id = $2",
+          [auth.tenantId, params.data.userId],
+        );
+        await client.query(
+          `INSERT INTO memberships (id, tenant_id, user_id, role_id)
+           VALUES ($1, $2, $3, $4)`,
+          [randomUUID(), auth.tenantId, params.data.userId, parsed.data.roleId],
+        );
+        await client.query(
+          `INSERT INTO audit_events (id, tenant_id, actor_user_id, event, metadata)
+           VALUES ($1, $2, $3, 'user.role_changed', $4::jsonb)`,
+          [
+            randomUUID(),
+            auth.tenantId,
+            auth.userId,
+            JSON.stringify({ userId: params.data.userId, roleId: parsed.data.roleId }),
+          ],
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+      res.status(204).end();
+    } catch (error) {
+      req.log.error({ err: error }, "Tenant role assignment failed");
       res.status(503).json({ error: "User service unavailable" });
     }
   },

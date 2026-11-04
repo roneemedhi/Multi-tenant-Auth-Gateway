@@ -47,12 +47,21 @@ const contextFromRequest = async (req: Request): Promise<AuthContext> => {
     throw Object.assign(new Error("Invalid token claims"), { statusCode: 401 });
   }
 
-  const redis = await getRedis();
-  const [revokedToken, revokedSession, cachedSession] = await Promise.all([
-    redis.get(`auth:revoked:jti:${tokenId}`),
-    redis.get(`auth:revoked:sid:${sessionId}`),
-    redis.get(`auth:session:${sessionId}`),
-  ]);
+  let revokedToken: string | null;
+  let revokedSession: string | null;
+  let cachedSession: string | null;
+  try {
+    const redis = await getRedis();
+    [revokedToken, revokedSession, cachedSession] = await Promise.all([
+      redis.get(`auth:revoked:jti:${tokenId}`),
+      redis.get(`auth:revoked:sid:${sessionId}`),
+      redis.get(`auth:session:${sessionId}`),
+    ]);
+  } catch (error) {
+    throw Object.assign(new Error("Redis authentication dependency unavailable.", { cause: error }), {
+      statusCode: 503,
+    });
+  }
 
   if (revokedToken || revokedSession || !cachedSession) {
     throw Object.assign(new Error("Session is no longer active"), { statusCode: 401 });
@@ -83,9 +92,7 @@ export const requireAuth: RequestHandler = async (req, res, next) => {
       "statusCode" in error &&
       typeof error.statusCode === "number"
         ? error.statusCode
-        : error instanceof Error && error.message.includes("Redis")
-          ? 503
-          : 401;
+        : 401;
     if (statusCode >= 500) {
       req.log.error({ err: error }, "Authentication dependency unavailable");
     }

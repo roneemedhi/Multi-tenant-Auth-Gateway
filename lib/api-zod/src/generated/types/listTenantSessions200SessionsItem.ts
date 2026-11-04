@@ -6,11 +6,12 @@
  *
  * OpenAPI spec version: 0.1.0
  */
-import type { Tenant } from './tenant';
-import type { TokenPair } from './tokenPair';
-import type { User } from './user';
 
-export type AuthResponse = TokenPair & {
-  tenant?: Tenant;
-  user?: User;
+export type ListTenantSessions200SessionsItem = {
+  sessionId: string;
+  userId: string;
+  userName: string;
+  createdAt: Date;
+  lastUsedAt: Date;
+  expiresAt: Date;
 };
